@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rental Property Management System</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background-color: #f4f6f8; color: #333; }
+        h1 { color: #2c3e50; text-align: center; }
+        .form-container, .property-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #3498db; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #2980b9; }
+        .property-list { margin-top: 20px; }
+        .property-item { background: #fff; padding: 15px; border-left: 4px solid #3498db; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .btn-delete { background-color: #e74c3c; margin-left: 5px; padding: 5px 10px; font-size: 14px; }
+        .btn-delete:hover { background-color: #c0392b; }
+        .btn-edit { background-color: #f39c12; margin-left: 5px; padding: 5px 10px; font-size: 14px; }
+        .btn-edit:hover { background-color: #d35400; }
+    </style>
+</head>
+<body>
+
+    <h1>Rental Property Management System</h1>
+
+    <!-- Form para sa pagdaragdag at pag-edit ng Property (Create / Update) -->
+    <div class="form-container">
+        <h3 id="formTitle">Add New Property</h3>
+        <form id="propertyForm">
+            <input type="hidden" id="propertyId">
+            <input type="text" id="title" placeholder="Property Title (e.g. Modern Apartment)" required>
+            <input type="text" id="address" placeholder="Address" required>
+            <input type="number" id="rentPrice" placeholder="Price per Month (₱)" required>
+            <textarea id="description" placeholder="Description"></textarea>
+            <button type="submit" id="submitBtn">Add Property</button>
+        </form>
+    </div>
+
+    <!-- Listahan ng mga Properties (Read, Update, Delete) -->
+    <div class="property-list">
+        <h3>Available Properties</h3>
+        <div id="propertiesContainer">Loading properties...</div>
+    </div>
+
+    <script>
+        let isEditing = false;
+
+        // Function para kunin at ipakita ang mga properties mula sa database (GET)
+        async function fetchProperties() {
+            try {
+                const response = await fetch('/api/properties');
+                const result = await response.json();
+                const container = document.getElementById('propertiesContainer');
+                
+                const properties = result.data || result;
+
+                if (!properties || properties.length === 0) {
+                    container.innerHTML = '<p>No properties found.</p>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                properties.forEach(prop => {
+                    const propId = prop._id || prop.id;
+                    container.innerHTML += `
+                        <div class="property-item">
+                            <h4>${prop.title}</h4>
+                            <p><strong>Address:</strong> ${prop.address}</p>
+                            <p><strong>Price:</strong> ₱${prop.rentPrice || prop.price}</p>
+                            <p>${prop.description || ''}</p>
+                            <button class="btn-edit" onclick="editProperty('${propId}', '${prop.title}', '${prop.address}', '${prop.rentPrice || prop.price}', '${prop.description || ''}')">Edit</button>
+                            <button class="btn-delete" onclick="deleteProperty('${propId}')">Delete</button>
+                        </div>
+                    `;
+                });
+            } catch (err) {
+                console.error('Error fetching properties:', err);
+                document.getElementById('propertiesContainer').innerHTML = '<p>Error loading properties.</p>';
+            }
+        }
+
+        // Function para mag-submit o mag-update ng property (Create o Update)
+        document.getElementById('propertyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const id = document.getElementById('propertyId').value;
+            const propertyData = {
+                title: document.getElementById('title').value,
+                address: document.getElementById('address').value,
+                rentPrice: Number(document.getElementById('rentPrice').value),
+                description: document.getElementById('description').value
+            };
+
+            try {
+                let response;
+                if (isEditing) {
+                    // UPDATE (PUT)
+                    response = await fetch(`/api/properties/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(propertyData)
+                    });
+                } else {
+                    // CREATE (POST)
+                    response = await fetch('/api/properties', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(propertyData)
+                    });
+                }
+
+                if (response.ok) {
+                    resetForm();
+                    fetchProperties();
+                } else {
+                    const errData = await response.json();
+                    alert('Operation failed: ' + (errData.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Error saving property:', err);
+            }
+        });
+
+        // I-load ang data sa form para ma-edit
+        function editProperty(id, title, address, rentPrice, description) {
+            isEditing = true;
+            document.getElementById('propertyId').value = id;
+            document.getElementById('title').value = title;
+            document.getElementById('address').value = address;
+            document.getElementById('rentPrice').value = rentPrice;
+            document.getElementById('description').value = description;
+            
+            document.getElementById('formTitle').innerText = 'Edit Property';
+            document.getElementById('submitBtn').innerText = 'Update Property';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Function para mag-delete ng property (DELETE)
+        async function deleteProperty(id) {
+            if (!confirm('Sigurado ka bang gusto mong burahin ang property na ito?')) return;
+
+            try {
+                const response = await fetch(`/api/properties/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    fetchProperties();
+                } else {
+                    alert('Failed to delete property.');
+                }
+            } catch (err) {
+                console.error('Error deleting property:', err);
+            }
+        }
+
+        function resetForm() {
+            isEditing = false;
+            document.getElementById('propertyId').value = '';
+            document.getElementById('propertyForm').reset();
+            document.getElementById('formTitle').innerText = 'Add New Property';
+            document.getElementById('submitBtn').innerText = 'Add Property';
+        }
+
+        // Tawagin ang fetch kapag nag-load ang page
+        fetchProperties();
+    </script>
+</body>
+</html>
